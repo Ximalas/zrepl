@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,19 +12,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zrepl/zrepl/logger"
-	"github.com/zrepl/zrepl/rpc/dataconn/frameconn2"
 	"github.com/zrepl/zrepl/rpc/dataconn/heartbeatconn"
 	"github.com/zrepl/zrepl/util/socketpair"
 )
 
 func TestFrameTypesOk(t *testing.T) {
-	t.Logf("%v", SourceEOF)
-	assert.True(t, frameconn.IsPublicFrameType(SourceEOF))
-	assert.True(t, frameconn.IsPublicFrameType(SourceErr))
-
-	assert.True(t, IsPublicFrameType(0))
-	assert.True(t, IsPublicFrameType(1))
-	assert.True(t, IsPublicFrameType(255))
+	t.Logf("%v", End)
+	assert.True(t, heartbeatconn.IsPublicFrameType(End))
+	assert.True(t, heartbeatconn.IsPublicFrameType(StreamErrTrailer))
 }
 
 func TestStreamer(t *testing.T) {
@@ -37,7 +33,6 @@ func TestStreamer(t *testing.T) {
 
 	log := logger.NewStderrDebugLogger()
 	ctx := WithLogger(context.Background(), log)
-	stype := uint32(0x23)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -47,7 +42,7 @@ func TestStreamer(t *testing.T) {
 		buf.Write(
 			bytes.Repeat([]byte{1, 2}, 1<<25),
 		)
-		WriteStream(ctx, a, &buf, stype)
+		writeStream(ctx, a, &buf, Stream)
 		log.Debug("WriteStream returned")
 		a.Close()
 	}()
@@ -55,7 +50,8 @@ func TestStreamer(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		var buf bytes.Buffer
-		err := ReadStream(b, &buf, stype)
+		ch := make(chan readStreamResult, 5)
+		err := readStream(ch, b, &buf, Stream)
 		log.WithField("errType", fmt.Sprintf("%T %v", err, err)).Debug("ReadStream returned")
 		assert.Nil(t, err)
 		expected := bytes.Repeat([]byte{1, 2}, 1<<25)
@@ -65,4 +61,58 @@ func TestStreamer(t *testing.T) {
 
 	wg.Wait()
 
+}
+
+type errReader struct {
+	t       *testing.T
+	readErr error
+}
+
+func (er errReader) Read(p []byte) (n int, err error) {
+	er.t.Logf("errReader.Read called")
+	return 0, er.readErr
+}
+
+func TestMultiFrameStreamErrTraileror(t *testing.T) {
+	anc, bnc, err := socketpair.SocketPair()
+	require.NoError(t, err)
+
+	hto := 1 * time.Hour
+	a := heartbeatconn.Wrap(anc, hto, hto)
+	b := heartbeatconn.Wrap(bnc, hto, hto)
+
+	log := logger.NewStderrDebugLogger()
+	ctx := WithLogger(context.Background(), log)
+
+	longErr := fmt.Errorf("an error that definitley spans more than one frame:\n%s", strings.Repeat("a\n", 1<<4))
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		r := errReader{t, longErr}
+		writeStream(ctx, a, &r, Stream)
+		a.Close()
+	}()
+
+	go func() {
+		defer wg.Done()
+		defer b.Close()
+		var buf bytes.Buffer
+		ch := make(chan readStreamResult, 5)
+		err := readStream(ch, b, &buf, Stream)
+		t.Logf("%s", err)
+		require.NotNil(t, err)
+		assert.True(t, buf.Len() == 0)
+		assert.Equal(t, err.Kind, ReadStreamErrorKindSource)
+		receivedErr := err.Err.Error()
+		expectedErr := longErr.Error()
+		assert.True(t, receivedErr == expectedErr) // builtin Equals is too slow
+		if receivedErr != expectedErr {
+			t.Logf("lengths: %v %v", len(receivedErr), len(expectedErr))
+		}
+
+	}()
+
+	wg.Wait()
 }
