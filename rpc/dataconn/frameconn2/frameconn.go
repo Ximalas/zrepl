@@ -43,6 +43,7 @@ type Conn struct {
 	ncBuf             *bufio.ReadWriter
 	readNextValid     bool
 	readNext          FrameHeader
+	nextReadErr       error
 	bufPool           *base2bufpool.Pool // no need for sync around it
 }
 
@@ -83,6 +84,12 @@ func (c *Conn) ReadFrame() (Frame, error) {
 	c.readMtx.Lock()
 	defer c.readMtx.Unlock()
 
+	if c.nextReadErr != nil {
+		ret := c.nextReadErr
+		c.nextReadErr = nil
+		return Frame{}, ret
+	}
+
 	if !c.readNextValid {
 		var buf [8]byte
 		if _, err := io.ReadFull(c.nc, buf[:]); err != nil {
@@ -97,11 +104,17 @@ func (c *Conn) ReadFrame() (Frame, error) {
 	buffer := c.bufPool.Get(uint(c.readNext.PayloadLen))
 	bufferBytes := buffer.Bytes()
 
-	endOfConnection := false
+	noNextHeader := false
 	if n, err := c.nc.ReadvFull([][]byte{bufferBytes, nextHdrBuf[:]}); err != nil {
-		endOfConnection = (n == 0 && err == io.EOF) ||
-			(err == io.ErrUnexpectedEOF && uint32(n) == c.readNext.PayloadLen)
-		if !endOfConnection {
+		noNextHeader = true	
+		zeroPayloadAndPeerClosed := n == 0 && c.readNext.PayloadLen == 0 && err == io.EOF
+		nonzeroPayloadRecvdButNextHeaderMissing := n > 0 && uint32(n) == c.readNext.PayloadLen
+		if zeroPayloadAndPeerClosed || nonzeroPayloadRecvdButNextHeaderMissing {
+			// This is the last frame on the conn.
+			// Store the error to be returned on the next invocation of ReadFrame.
+			c.nextReadErr = err
+			// NORETURN, this frame is still valid
+		} else {
 			return Frame{}, err
 		}
 	}
@@ -114,7 +127,7 @@ func (c *Conn) ReadFrame() (Frame, error) {
 		},
 	}
 
-	if !endOfConnection {
+	if !noNextHeader {
 		c.readNext.Unmarshal(nextHdrBuf[:])
 		c.readNextValid = true
 	} else {

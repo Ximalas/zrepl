@@ -107,6 +107,10 @@ func buildIovecs(buffers net.Buffers) (totalLen int64, vecs []syscall.Iovec) {
 //
 // If the underlying net.Conn is not a SyscallConner, a fallback
 // ipmlementation based on repeated Conn.Read invocations is used.
+//
+// If the connection returned io.EOF, the number of bytes up ritten until
+// then + io.EOF is returned. This behavior is different to io.ReadFull
+// which returns io.ErrUnexpectedEOF.
 func (c Conn) ReadvFull(buffers net.Buffers) (n int64, err error) {
 	totalLen, iovecs := buildIovecs(buffers)
 	if debugReadvNoShortReadsAssertEnable {
@@ -129,6 +133,10 @@ func (c Conn) readvFallback(buffers net.Buffers) (n int64, err error) {
 		thisN, err := io.ReadFull(c, buffers[i])
 		n += int64(thisN)
 		if err != nil {
+			// reverse io.EOF => io.ErrUnexpectedEOF by io.ReadFull
+			if err == io.ErrUnexpectedEOF {
+				err = io.EOF
+			}
 			return n, err
 		}
 	}
