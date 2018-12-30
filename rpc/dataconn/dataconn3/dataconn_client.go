@@ -60,6 +60,22 @@ func (c *Client) send(ctx context.Context, conn *stream.Conn, endpoint string, r
 	}
 }
 
+type RemoteHandlerError struct {
+	msg string	
+}
+
+func (e *RemoteHandlerError) Error() string {
+	 return fmt.Sprintf("server error: %s", e.msg)
+}
+
+type ProtocolError struct {
+	cause error
+}
+
+func (e *ProtocolError) Error() string {
+	return fmt.Sprintf("protocol error: %s", e)
+}
+
 func (c *Client) recv(ctx context.Context, conn *stream.Conn, res proto.Message) error {
 
 	headerBuf, err := conn.ReadStreamedMessage(ctx, 1<<15, ResHeader)
@@ -69,15 +85,18 @@ func (c *Client) recv(ctx context.Context, conn *stream.Conn, res proto.Message)
 	header := string(headerBuf)
 	if strings.HasPrefix(header, "HANDLER ERROR:\n") {
 		// FIXME distinguishable error type
-		return fmt.Errorf("server error: %q", strings.TrimPrefix(header, "HANDLER ERROR:\n"))
+		return &RemoteHandlerError{strings.TrimPrefix(header, "HANDLER ERROR:\n")}
 	}
 	if !strings.HasPrefix(header, "HANDLER OK") {
-		return fmt.Errorf("protocol error: invalid header: %q", header)
+		return &ProtocolError{fmt.Errorf("invalid header: %q", header)}
 	}
 
 	protobuf, err := conn.ReadStreamedMessage(ctx, 1<<22, ResStructured)
-	if err := proto.Unmarshal(protobuf, res); err != nil {
+	if err != nil {
 		return err
+	}
+	if err := proto.Unmarshal(protobuf, res); err != nil {
+		return &ProtocolError{fmt.Errorf("cannot unmarshal structured part of response: %s", err)}
 	}
 	return nil
 }
@@ -190,6 +209,10 @@ func (c *Client) ReqRecv(ctx context.Context, req *pdu.ReceiveReq, streamCopier 
 	if !didTryClose {
 		// didn't close it in above loop, so we can give it back
 		c.putWire(conn)	
+	}
+
+	if _, ok := res.err.(*RemoteHandlerError); ok {
+		cause = res.err	
 	}
 
 	return res.res, cause
