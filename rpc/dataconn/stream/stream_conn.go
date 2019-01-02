@@ -5,11 +5,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"sync"
 	"time"
 
 	"github.com/zrepl/zrepl/rpc/dataconn/heartbeatconn"
-	"github.com/zrepl/zrepl/rpc/dataconn/timeoutconn"
 	"github.com/zrepl/zrepl/zfs"
 )
 
@@ -35,13 +35,9 @@ func (e writeStreamToErrorUnknownState) IsReadError() bool { return true }
 
 func (e writeStreamToErrorUnknownState) IsWriteError() bool { return false }
 
-func Wrap(nc timeoutconn.DuplexConn, sendHeartbeatInterval, peerTimeout time.Duration) *Conn {
+func Wrap(nc net.Conn, sendHeartbeatInterval, peerTimeout time.Duration) *Conn {
 	hc := heartbeatconn.Wrap(nc, sendHeartbeatInterval, peerTimeout)
 	return &Conn{hc: hc, readClean: true, writeClean: true}
-}
-
-func (c *Conn) Unwrap() timeoutconn.DuplexConn {
-	c.hc.
 }
 
 func isConnCleanAfterRead(res *ReadStreamError) bool {

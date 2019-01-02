@@ -4,18 +4,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/zrepl/zrepl/logger"
 	"github.com/zrepl/zrepl/replication/pdu"
 	"github.com/zrepl/zrepl/rpc/dataconn/stream"
+	"github.com/zrepl/zrepl/transport"
 	"github.com/zrepl/zrepl/zfs"
 )
 
 // WireInterceptor has a chance to exchange the context and connection on each client connection.
-type WireInterceptor func(ctx context.Context, conn net.Conn) (context.Context, net.Conn)
+type WireInterceptor func(ctx context.Context, rawConn *transport.AuthConn) (context.Context, *transport.AuthConn)
 
 // Handler implements the functionality that is exposed by Server to the Client.
 type Handler interface {
@@ -56,7 +56,7 @@ func NewServer(wi WireInterceptor, logger Logger, handler Handler) *Server {
 // Serve consumes the listener, closes it as soon as ctx is closed.
 // No accept errors are returned: they are logged to the Logger passed
 // to the constructor.
-func (s *Server) Serve(ctx context.Context, l net.Listener) {
+func (s *Server) Serve(ctx context.Context, l transport.AuthenticatedListener) {
 
 	go func() {
 		<-ctx.Done()
@@ -65,10 +65,10 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) {
 			s.log.WithError(err).Error("cannot close listener")
 		}
 	}()
-	conns := make(chan net.Conn)
+	conns := make(chan *transport.AuthConn)
 	go func() {
 		for {
-			conn, err := l.Accept()
+			conn, err := l.Accept(ctx)
 			if err != nil {
 				if ctx.Done() != nil {
 					s.log.Debug("stop accepting after context is done")
@@ -85,7 +85,7 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) {
 	}
 }
 
-func (s *Server) serveConn(nc net.Conn) {
+func (s *Server) serveConn(nc *transport.AuthConn) {
 	s.log.Debug("serveConn begin")
 	defer s.log.Debug("serveConn done")
 

@@ -6,7 +6,6 @@ import (
 	"github.com/zrepl/zrepl/transport"
 	"github.com/zrepl/zrepl/rpc/versionhandshake"
 	"github.com/zrepl/zrepl/util/envconst"
-	"net"
 	"time"
 
 	"github.com/zrepl/zrepl/config"
@@ -98,9 +97,8 @@ func NewServer(config ServerConfig, handler Handler, log Logger, ctxInterceptor 
 
 	// setup data server
 	dataLog := logging.LogSubsystem(log, logging.SubsysDataServer)
-	dataServerClientIdentitySetter := func(ctx context.Context, wire net.Conn) (context.Context, net.Conn) {
-		authConn := wire.(*transport.AuthConn) // we set the listener cascase up above, we know this is true
-		ci := authConn.ClientIdentity()
+	dataServerClientIdentitySetter := func(ctx context.Context, wire *transport.AuthConn) (context.Context, *transport.AuthConn) {
+		ci := wire.ClientIdentity()
 		ctx = context.WithValue(ctx, endpoint.ClientIdentityKey, ci)
 		if ctxInterceptor != nil {
 			ctx = ctxInterceptor(ctx) // SHADOWING
@@ -109,8 +107,7 @@ func NewServer(config ServerConfig, handler Handler, log Logger, ctxInterceptor 
 	}
 	dataServer := dataconn.NewServer(dataServerClientIdentitySetter, dataLog, handler)
 	dataServerServe := func(ctx context.Context, dataListener transport.AuthenticatedListener, errOut chan<- error) {
-		dataNetListener := netadaptor.New(dataListener, dataLog)
-		dataServer.Serve(ctx, dataNetListener)
+		dataServer.Serve(ctx, dataListener)
 		errOut <- nil // TODO bad design of dataServer?
 	}
 
