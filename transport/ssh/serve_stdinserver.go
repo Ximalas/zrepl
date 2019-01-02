@@ -128,8 +128,14 @@ type netsshAddr struct{}
 func (netsshAddr) Network() string { return "netssh" }
 func (netsshAddr) String() string  { return "???" }
 
+// works for both netssh.SSHConn and netssh.ServeConn
+type netsshConn interface {
+	io.ReadWriteCloser
+	CloseWrite() error
+}
+
 type netsshConnToNetConnAdatper struct {
-	io.ReadWriteCloser // works for both netssh.SSHConn and netssh.ServeConn
+	netsshConn
 }
 
 func (netsshConnToNetConnAdatper) LocalAddr() net.Addr { return netsshAddr{} }

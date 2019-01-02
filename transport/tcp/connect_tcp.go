@@ -2,8 +2,10 @@ package tcp
 
 import (
 	"context"
-	"github.com/zrepl/zrepl/config"
 	"net"
+
+	"github.com/zrepl/zrepl/config"
+	"github.com/zrepl/zrepl/transport"
 )
 
 type TCPConnecter struct {
@@ -19,6 +21,10 @@ func TCPConnecterFromConfig(in *config.TCPConnect) (*TCPConnecter, error) {
 	return &TCPConnecter{in.Address, dialer}, nil
 }
 
-func (c *TCPConnecter) Connect(dialCtx context.Context) (conn net.Conn, err error) {
-	return c.dialer.DialContext(dialCtx, "tcp", c.Address)
+func (c *TCPConnecter) Connect(dialCtx context.Context) (transport.Wire, error) {
+	conn, err := c.dialer.DialContext(dialCtx, "tcp", c.Address)
+	if err != nil {
+		return nil, err
+	}
+	return conn.(*net.TCPConn), nil
 }

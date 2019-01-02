@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/problame/go-netssh"
 	"github.com/zrepl/zrepl/config"
-	"net"
+	"github.com/zrepl/zrepl/transport"
 	"time"
 )
 
@@ -36,15 +36,7 @@ func SSHStdinserverConnecterFromConfig(in *config.SSHStdinserverConnect) (c *SSH
 
 }
 
-type netsshConnToConn struct{ *netssh.SSHConn }
-
-var _ net.Conn = netsshConnToConn{}
-
-func (netsshConnToConn) SetDeadline(dl time.Time) error      { return nil }
-func (netsshConnToConn) SetReadDeadline(dl time.Time) error  { return nil }
-func (netsshConnToConn) SetWriteDeadline(dl time.Time) error { return nil }
-
-func (c *SSHStdinserverConnecter) Connect(dialCtx context.Context) (net.Conn, error) {
+func (c *SSHStdinserverConnecter) Connect(dialCtx context.Context) (transport.Wire, error) {
 
 	var endpoint netssh.Endpoint
 	if err := copier.Copy(&endpoint, c); err != nil {
@@ -59,5 +51,5 @@ func (c *SSHStdinserverConnecter) Connect(dialCtx context.Context) (net.Conn, er
 		}
 		return nil, err
 	}
-	return netsshConnToConn{nconn}, nil
+	return netsshConnToNetConnAdatper{nconn}, nil
 }

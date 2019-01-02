@@ -3,10 +3,12 @@ package tls
 import (
 	"context"
 	"crypto/tls"
+	"net"
+
 	"github.com/pkg/errors"
 	"github.com/zrepl/zrepl/config"
 	"github.com/zrepl/zrepl/tlsconf"
-	"net"
+	"github.com/zrepl/zrepl/transport"
 )
 
 type TLSConnecter struct {
@@ -38,8 +40,8 @@ func TLSConnecterFromConfig(in *config.TLSConnect) (*TLSConnecter, error) {
 	return &TLSConnecter{in.Address, dialer, tlsConfig}, nil
 }
 
-func (c *TLSConnecter) Connect(dialCtx context.Context) (conn net.Conn, err error) {
-	conn, err = c.dialer.DialContext(dialCtx, "tcp", c.Address)
+func (c *TLSConnecter) Connect(dialCtx context.Context) (transport.Wire, error) {
+	conn, err := c.dialer.DialContext(dialCtx, "tcp", c.Address)
 	if err != nil {
 		return nil, err
 	}

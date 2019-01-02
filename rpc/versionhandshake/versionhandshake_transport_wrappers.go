@@ -12,7 +12,7 @@ type HandshakeConnecter struct {
 	timeout time.Duration
 }
 
-func (c HandshakeConnecter) Connect(ctx context.Context) (net.Conn, error) {
+func (c HandshakeConnecter) Connect(ctx context.Context) (transport.Wire, error) {
 	conn, err := c.connecter.Connect(ctx)
 	if err != nil {
 		return nil, err

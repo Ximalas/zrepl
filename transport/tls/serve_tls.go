@@ -81,7 +81,8 @@ func (l tlsAuthListener) Accept(ctx context.Context) (*transport.AuthConn, error
 		}
 		return nil, fmt.Errorf("unauthorized client common name %q from %s", cn, c.RemoteAddr())
 	}
-	return transport.NewAuthConn(c, cn), nil
+	tlsConn := c.(*tls.Conn) // gives us the Wire interface
+	return transport.NewAuthConn(tlsConn, cn), nil
 }
 
 

@@ -40,7 +40,7 @@ type connectRequest struct {
 }
 
 type connectResult struct {
-	conn net.Conn
+	conn transport.Wire
 	err error
 }
 
@@ -55,7 +55,7 @@ func newLocalListener() *LocalListener {
 }
 
 // Connect to the LocalListener from a client with identity clientIdentity
-func (l *LocalListener) Connect(dialCtx context.Context, clientIdentity string) (conn net.Conn, err error) {
+func (l *LocalListener) Connect(dialCtx context.Context, clientIdentity string) (conn transport.Wire, err error) {
 
 	// place request
 	req := connectRequest{

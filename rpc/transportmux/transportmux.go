@@ -156,7 +156,7 @@ type labeledConnecter struct {
 	transport.Connecter	
 }
 
-func (c labeledConnecter) Connect(ctx context.Context) (net.Conn, error) {
+func (c labeledConnecter) Connect(ctx context.Context) (transport.Wire, error) {
 	conn, err := c.Connecter.Connect(ctx)
 	if err != nil {
 		return nil, err

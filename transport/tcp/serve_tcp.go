@@ -66,7 +66,7 @@ type TCPAuthListener struct {
 }
 
 func (f *TCPAuthListener) Accept(ctx context.Context) (*transport.AuthConn, error) {
-	nc, err := f.TCPListener.Accept()
+	nc, err := f.TCPListener.AcceptTCP()
 	if err != nil {
 		return nil, err
 	}

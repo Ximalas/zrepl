@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/zrepl/zrepl/config"
-	"net"
+	"github.com/zrepl/zrepl/transport"
 )
 
 type LocalConnecter struct {
@@ -22,7 +22,7 @@ func LocalConnecterFromConfig(in *config.LocalConnect) (*LocalConnecter, error) 
 	return &LocalConnecter{listenerName: in.ListenerName, clientIdentity: in.ClientIdentity}, nil
 }
 
-func (c *LocalConnecter) Connect(dialCtx context.Context) (conn net.Conn, err error) {
+func (c *LocalConnecter) Connect(dialCtx context.Context) (transport.Wire, error) {
 	l := GetLocalListener(c.listenerName)
 	return l.Connect(dialCtx, c.clientIdentity)
 }
