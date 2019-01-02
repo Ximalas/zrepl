@@ -14,11 +14,21 @@ import (
 )
 
 type Conn struct {
-	hc                 *heartbeatconn.Conn
+	hc *heartbeatconn.Conn
+
+	// whether the per-conn readFrames goroutine completed
+	waitReadFramesDone chan struct{}
+	// filled by per-conn readFrames goroutine
+	frameReads chan readFrameResult
+
+	// readMtx serializes read stream operations because we inherently only
+	// support a single stream at a time over hc.
 	readMtx            sync.Mutex
 	readClean          bool
 	allowWriteStreamTo bool
 
+	// writeMtx serializes write stream operations because we inherently only
+	// support a single stream at a time over hc.
 	writeMtx   sync.Mutex
 	writeClean bool
 }
@@ -37,7 +47,13 @@ func (e writeStreamToErrorUnknownState) IsWriteError() bool { return false }
 
 func Wrap(nc timeoutconn.Wire, sendHeartbeatInterval, peerTimeout time.Duration) *Conn {
 	hc := heartbeatconn.Wrap(nc, sendHeartbeatInterval, peerTimeout)
-	return &Conn{hc: hc, readClean: true, writeClean: true}
+	conn := &Conn{
+		hc: hc, readClean: true, writeClean: true,
+		waitReadFramesDone: make(chan struct{}),
+		frameReads:         make(chan readFrameResult, 5), // FIXME constant
+	}
+	go conn.readFrames()
+	return conn
 }
 
 func isConnCleanAfterRead(res *ReadStreamError) bool {
@@ -46,6 +62,14 @@ func isConnCleanAfterRead(res *ReadStreamError) bool {
 
 func isConnCleanAfterWrite(err error) bool {
 	return err == nil
+}
+
+var ErrReadFramesStopped = fmt.Errorf("stream: reading frames stopped")
+
+func (c *Conn) readFrames() {
+	defer close(c.waitReadFramesDone)
+	defer close(c.frameReads)
+	readFrames(c.frameReads, c.hc)
 }
 
 func (c *Conn) ReadStreamedMessage(ctx context.Context, maxSize uint32, frameType uint32) ([]byte, *ReadStreamError) {
@@ -69,8 +93,7 @@ func (c *Conn) ReadStreamedMessage(ctx context.Context, maxSize uint32, frameTyp
 			panic(err)
 		}
 	}()
-	ch := make(chan readStreamResult, 5)
-	err := readStream(ch, c.hc, w, frameType)
+	err := readStream(c.frameReads, c.hc, w, frameType)
 	c.readClean = isConnCleanAfterRead(err)
 	w.CloseWithError(readMessageSentinel)
 	wg.Wait()
@@ -88,8 +111,7 @@ func (c *Conn) ReadStreamInto(w io.Writer, frameType uint32) zfs.StreamCopierErr
 	if !c.readClean {
 		return writeStreamToErrorUnknownState{}
 	}
-	ch := make(chan readStreamResult, 5)
-	var err *ReadStreamError = readStream(ch, c.hc, w, frameType)
+	var err *ReadStreamError = readStream(c.frameReads, c.hc, w, frameType)
 	c.readClean = isConnCleanAfterRead(err)
 
 	// https://golang.org/doc/faq#nil_error
@@ -162,7 +184,8 @@ func (c *Conn) SendStream(ctx context.Context, src zfs.StreamCopier, frameType u
 	}
 }
 
-
 func (c *Conn) Close() error {
-	return c.hc.Shutdown()
+	err := c.hc.Shutdown()
+	<-c.waitReadFramesDone
+	return err
 }

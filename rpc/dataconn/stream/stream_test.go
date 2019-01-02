@@ -34,6 +34,8 @@ func TestStreamer(t *testing.T) {
 	log := logger.NewStderrDebugLogger()
 	ctx := WithLogger(context.Background(), log)
 
+	stype := uint32(0x23)
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
@@ -42,21 +44,26 @@ func TestStreamer(t *testing.T) {
 		buf.Write(
 			bytes.Repeat([]byte{1, 2}, 1<<25),
 		)
-		writeStream(ctx, a, &buf, Stream)
+		writeStream(ctx, a, &buf, stype)
 		log.Debug("WriteStream returned")
-		a.Close()
+		a.Shutdown()
 	}()
 
 	go func() {
 		defer wg.Done()
 		var buf bytes.Buffer
-		ch := make(chan readStreamResult, 5)
-		err := readStream(ch, b, &buf, Stream)
+		ch := make(chan readFrameResult, 5)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			readFrames(ch, b)
+		}()
+		err := readStream(ch, b, &buf, stype)
 		log.WithField("errType", fmt.Sprintf("%T %v", err, err)).Debug("ReadStream returned")
 		assert.Nil(t, err)
 		expected := bytes.Repeat([]byte{1, 2}, 1<<25)
 		assert.True(t, bytes.Equal(expected, buf.Bytes()))
-		b.Close()
+		b.Shutdown()
 	}()
 
 	wg.Wait()
@@ -86,21 +93,28 @@ func TestMultiFrameStreamErrTraileror(t *testing.T) {
 
 	longErr := fmt.Errorf("an error that definitley spans more than one frame:\n%s", strings.Repeat("a\n", 1<<4))
 
+	stype := uint32(0x23)
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		r := errReader{t, longErr}
-		writeStream(ctx, a, &r, Stream)
-		a.Close()
+		writeStream(ctx, a, &r, stype)
+		a.Shutdown()
 	}()
 
 	go func() {
 		defer wg.Done()
-		defer b.Close()
+		defer b.Shutdown()
 		var buf bytes.Buffer
-		ch := make(chan readStreamResult, 5)
-		err := readStream(ch, b, &buf, Stream)
+		ch := make(chan readFrameResult, 5)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			readFrames(ch, b)
+		}()
+		err := readStream(ch, b, &buf, stype)
 		t.Logf("%s", err)
 		require.NotNil(t, err)
 		assert.True(t, buf.Len() == 0)
@@ -111,7 +125,6 @@ func TestMultiFrameStreamErrTraileror(t *testing.T) {
 		if receivedErr != expectedErr {
 			t.Logf("lengths: %v %v", len(receivedErr), len(expectedErr))
 		}
-
 	}()
 
 	wg.Wait()

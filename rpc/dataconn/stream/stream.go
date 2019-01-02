@@ -190,27 +190,28 @@ func (e ReadStreamError) IsWriteError() bool {
 	return e.Kind == ReadStreamErrorKindWrite
 }
 
-type readStreamResult struct {
+type readFrameResult struct {
 	f   frameconn.Frame
 	err error
 }
 
-// ReadStream will close c if an error reading  from c or writing to receiver occurs
-func readStream(reads chan readStreamResult, c *heartbeatconn.Conn, receiver io.Writer, stype uint32) *ReadStreamError {
-	go func() { // FIXME only one per conn, move this out of here
-		for {
-			var r readStreamResult
-			r.f, r.err = c.ReadFrame()
-			reads <- r
-			if r.err != nil || r.f.Header.Type == End {
-				return
-			}
+func readFrames(reads chan<- readFrameResult, c *heartbeatconn.Conn) {
+	for {
+		var r readFrameResult
+		r.f, r.err = c.ReadFrame()
+		reads <- r
+		if r.err != nil {
+			return
 		}
-	}()
+	}
+}
+
+// ReadStream will close c if an error reading  from c or writing to receiver occurs
+func readStream(reads <-chan readFrameResult, c *heartbeatconn.Conn, receiver io.Writer, stype uint32) *ReadStreamError {
 
 	var f frameconn.Frame
 	for read := range reads {
-		fmt.Fprintf(os.Stderr, "readStream.didRead %v %v\n", read.err, read.f)
+		fmt.Fprintf(os.Stderr, "readStream: read frame %v %v\n", read.f.Header, read.err)
 		f = read.f
 		if read.err != nil {
 			return &ReadStreamError{ReadStreamErrorKindConn, read.err}
