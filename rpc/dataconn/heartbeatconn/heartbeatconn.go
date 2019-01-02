@@ -56,7 +56,7 @@ func assertPublicFrameType(frameType uint32) {
 	}
 }
 
-func Wrap(nc net.Conn, sendInterval, timeout time.Duration) *Conn {
+func Wrap(nc timeoutconn.Wire, sendInterval, timeout time.Duration) *Conn {
 	c := &Conn{
 		fc:           frameconn.Wrap(timeoutconn.Wrap(nc, timeout)),
 		stopSend:     make(chan struct{}),
@@ -69,12 +69,12 @@ func Wrap(nc net.Conn, sendInterval, timeout time.Duration) *Conn {
 	return c
 }
 
-func (c *Conn) Close() error {
+func (c *Conn) Shutdown() error {
 	normalClose := atomic.CompareAndSwapInt32(&c.state, stateInitial, stateClosed)
 	if normalClose {
 		close(c.stopSend)
 	}
-	return c.fc.Close()
+	return c.fc.Shutdown(time.Now().Add(c.timeout))
 }
 
 // started as a goroutine in constructor
