@@ -2,10 +2,8 @@ package timeoutconn
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"net"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -58,6 +56,10 @@ func (c writeBlockConn) Write(p []byte) (int, error) {
 	return c.Conn.Write(p)
 }
 
+func (c writeBlockConn) CloseWrite() error {
+	return c.Conn.Close()
+}
+
 func TestWriteTimeout(t *testing.T) {
 	a, b, err := socketpair.SocketPair()
 	require.NoError(t, err)
@@ -86,21 +88,33 @@ func TestNoPartialReadsDueToDeadline(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		a.Write([]byte{1, 2, 3, 4, 5})
-		time.Sleep(150 * time.Millisecond)
+		// sleep to provoke a partial read in the consumer goroutine
+		time.Sleep(50 * time.Millisecond)
 		a.Write([]byte{6, 7, 8, 9, 10})
 	}()
 
 	go func() {
 		defer wg.Done()
 		bc := Wrap(b, 100*time.Millisecond)
+		var buf bytes.Buffer
 		beginRead := time.Now()
-		var fillBuf [10]byte
-		bc.Read(fillBuf[:])
+		// io.Copy will encounter a partial read, then wait ~50ms until the other 5 bytes are written
+		// It is still going to fail with deadline err because it expects EOF
+		n, err := io.Copy(&buf, bc)
 		readDuration := time.Now().Sub(beginRead)
-		fmt.Fprintf(os.Stderr, "fillBuf: %v\n", fillBuf)
-		assert.Equal(t, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, fillBuf[:])
-		assert.True(t, readDuration > 100*time.Millisecond)
-		assert.True(t, readDuration < 200*time.Millisecond)
+		t.Logf("read duration=%s", readDuration)
+		t.Logf("recv done n=%v err=%v", n, err)
+		t.Logf("buf=%v", buf.Bytes())
+		neterr, ok := err.(net.Error)
+		require.True(t, ok)
+		assert.True(t, neterr.Timeout())
+
+		assert.Equal(t, int64(10), n)
+		assert.Equal(t, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, buf.Bytes())
+		// 50ms for the second read, 100ms after that one for the deadline
+		// allow for some jitter
+		assert.True(t, readDuration > 140*time.Millisecond)
+		assert.True(t, readDuration < 160*time.Millisecond)
 	}()
 
 	wg.Wait()
