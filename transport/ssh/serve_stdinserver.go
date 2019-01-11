@@ -5,10 +5,9 @@ import (
 	"github.com/zrepl/zrepl/config"
 	"github.com/zrepl/zrepl/daemon/nethelpers"
 	"github.com/zrepl/zrepl/transport"
-	"io"
+	"fmt"
 	"net"
 	"path"
-	"time"
 	"context"
 	"github.com/pkg/errors"
 	"sync/atomic"
@@ -86,8 +85,22 @@ func (m *MultiStdinserverListener) Accept(ctx context.Context) (*transport.AuthC
 
 }
 
-func (m *MultiStdinserverListener) Addr() (net.Addr) {
-	return netsshAddr{}
+type multiListenerAddr struct {
+	clients []string
+}
+
+func (multiListenerAddr) Network() string { return "netssh" }
+
+func (l multiListenerAddr) String() string {
+	return fmt.Sprintf("netssh:clients=%v", l.clients)
+}
+
+func (m *MultiStdinserverListener) Addr() net.Addr {
+	cis := make([]string, len(m.listeners))
+	for i := range cis {
+		cis[i] = m.listeners[i].clientIdentity
+	}
+	return multiListenerAddr{cis}
 }
 
 func (m *MultiStdinserverListener) Close() error {
@@ -107,8 +120,18 @@ type stdinserverListener struct {
 	clientIdentity string
 }
 
+type listenerAddr struct {
+	clientIdentity string
+}
+
+func (listenerAddr) Network() string { return "netssh" }
+
+func (a listenerAddr) String() string {
+	return fmt.Sprintf("netssh:client=%q", a.clientIdentity)
+}
+
 func (l stdinserverListener) Addr() net.Addr {
-	return netsshAddr{}
+	return listenerAddr{l.clientIdentity}
 }
 
 func (l stdinserverListener) Accept(ctx context.Context) (*transport.AuthConn, error) {
@@ -116,35 +139,9 @@ func (l stdinserverListener) Accept(ctx context.Context) (*transport.AuthConn, e
 	if err != nil {
 		return nil, err
 	}
-	return transport.NewAuthConn(netsshConnToNetConnAdatper{c}, l.clientIdentity), nil
+	return transport.NewAuthConn(c, l.clientIdentity), nil
 }
 
 func (l stdinserverListener) Close() (err error) {
 	return l.l.Close()
 }
-
-type netsshAddr struct{}
-
-func (netsshAddr) Network() string { return "netssh" }
-func (netsshAddr) String() string  { return "???" }
-
-// works for both netssh.SSHConn and netssh.ServeConn
-type netsshConn interface {
-	io.ReadWriteCloser
-	CloseWrite() error
-}
-
-type netsshConnToNetConnAdatper struct {
-	netsshConn
-}
-
-func (netsshConnToNetConnAdatper) LocalAddr() net.Addr { return netsshAddr{} }
-
-func (netsshConnToNetConnAdatper) RemoteAddr() net.Addr { return netsshAddr{} }
-
-// FIXME log warning once!
-func (netsshConnToNetConnAdatper) SetDeadline(t time.Time) error { return nil }
-
-func (netsshConnToNetConnAdatper) SetReadDeadline(t time.Time) error { return nil }
-
-func (netsshConnToNetConnAdatper) SetWriteDeadline(t time.Time) error { return nil }

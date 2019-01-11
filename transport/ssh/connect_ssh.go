@@ -51,5 +51,5 @@ func (c *SSHStdinserverConnecter) Connect(dialCtx context.Context) (transport.Wi
 		}
 		return nil, err
 	}
-	return netsshConnToNetConnAdatper{nconn}, nil
+	return nconn, nil
 }

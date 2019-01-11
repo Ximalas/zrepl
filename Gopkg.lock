@@ -205,14 +205,6 @@
   version = "v0.8.0"
 
 [[projects]]
-  digest = "1:1cbc6b98173422a756ae79e485952cb37a0a460c710541c75d3e9961c5a60782"
-  name = "github.com/pkg/profile"
-  packages = ["."]
-  pruneopts = ""
-  revision = "5b67d428864e92711fcbd2f8629456121a56d91f"
-  version = "v1.2.1"
-
-[[projects]]
   digest = "1:256484dbbcd271f9ecebc6795b2df8cad4c458dd0f5fd82a8c2fa0c29f233411"
   name = "github.com/pmezard/go-difflib"
   packages = ["difflib"]
@@ -222,11 +214,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:25559b520313b941b1395cd5d5ee66086b27dc15a1391c0f2aad29d5c2321f4b"
+  digest = "1:fa72f780ae3b4820ed12cef7a034291ab10d83e2da4ab5ba81afa44d5bf3a529"
   name = "github.com/problame/go-netssh"
   packages = ["."]
   pruneopts = ""
-  revision = "c56ad38d2c91397ad3c8dd9443d7448e328a9e9e"
+  revision = "09d6bc45d284784cb3e5aaa1998513f37eb19cc6"
 
 [[projects]]
   branch = "master"
@@ -306,6 +298,14 @@
   pruneopts = ""
   revision = "69483b4bd14f5845b5a1e55bca19e954e827f1d0"
   version = "v1.1.4"
+
+[[projects]]
+  digest = "1:f80053a92d9ac874ad97d665d3005c1118ed66e9e88401361dc32defe6bef21c"
+  name = "github.com/theckman/goconstraint"
+  packages = ["go1.11/gte"]
+  pruneopts = ""
+  revision = "93babf24513d0e8277635da8169fcc5a46ae3f6a"
+  version = "v1.11.0"
 
 [[projects]]
   branch = "v2"
@@ -430,7 +430,6 @@
     "github.com/kr/pretty",
     "github.com/mattn/go-isatty",
     "github.com/pkg/errors",
-    "github.com/pkg/profile",
     "github.com/problame/go-netssh",
     "github.com/problame/go-rwccmd",
     "github.com/prometheus/client_golang/prometheus",
