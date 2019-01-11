@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sys/unix"
 	"context"
 	"github.com/problame/go-rwccmd"
 	"github.com/prometheus/client_golang/prometheus"
@@ -372,7 +371,7 @@ func (c sendStreamCopier) Close() error {
 	return c.recorder.ReadCloser.Close()
 }
 
-func pipeWithCapacity(capacity int) (r, w *os.File, err error) {
+func pipeWithCapacityHint(capacity int) (r, w *os.File, err error) {
 	if capacity <= 0 {
 		panic(fmt.Sprintf("capacity must be positive %v", capacity))
 	}
@@ -380,14 +379,7 @@ func pipeWithCapacity(capacity int) (r, w *os.File, err error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	res, err := unix.FcntlInt(stdoutWriter.Fd(), unix.F_SETPIPE_SZ, capacity)
-	if err != nil {
-		stdoutReader.Close() // TODO log / metric?
-		stdoutWriter.Close() // TODO log / metric?
-		return nil, nil, fmt.Errorf("cannot set pipe capacity to %v", capacity)
-	} else if res == -1 {
-		return nil, nil, errors.New("cannot set pipe capacity: fcntl returned -1")
-	}
+	trySetPipeCapacity(stdoutWriter, capacity)
 	return stdoutReader, stdoutWriter, nil
 }
 
@@ -509,7 +501,7 @@ func ZFSSend(ctx context.Context, fs string, from, to string, token string) (str
 	cmd := exec.CommandContext(ctx, ZFS_BINARY, args...)
 
 	// setup stdout with an os.Pipe to control pipe buffer size
-	stdoutReader, stdoutWriter, err := pipeWithCapacity(1<<25); // FIXME constant
+	stdoutReader, stdoutWriter, err := pipeWithCapacityHint(1<<25); // FIXME constant
 	if err != nil {
 		cancel()
 		return nil, err
@@ -696,7 +688,7 @@ func ZFSRecv(ctx context.Context, fs string, streamCopier StreamCopier, addition
 	stdout := bytes.NewBuffer(make([]byte, 0, 1024))
 	cmd.Stdout = stdout
 
-	stdin, stdinWriter, err := pipeWithCapacity(1<<25);
+	stdin, stdinWriter, err := pipeWithCapacityHint(1<<25);
 	if err != nil {
 		return err
 	}
