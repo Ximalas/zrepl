@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	frameconn "github.com/zrepl/zrepl/rpc/dataconn/frameconn2"
+	"github.com/zrepl/zrepl/rpc/dataconn/frameconn"
 )
 
 func TestFrameTypes(t *testing.T) {

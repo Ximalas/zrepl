@@ -12,7 +12,7 @@ import (
 	"github.com/zrepl/zrepl/zfs"
 	"github.com/zrepl/zrepl/logger"
 	"github.com/zrepl/zrepl/config"
-	"github.com/zrepl/zrepl/rpc/dataconn/dataconn3"
+	"github.com/zrepl/zrepl/rpc/dataconn"
 	"github.com/zrepl/zrepl/rpc/grpcclientidentity/grpchelper"
 	"github.com/zrepl/zrepl/replication"
 	"github.com/zrepl/zrepl/replication/pdu"

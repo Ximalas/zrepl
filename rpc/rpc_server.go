@@ -10,7 +10,7 @@ import (
 
 	"github.com/zrepl/zrepl/config"
 	"github.com/zrepl/zrepl/daemon/logging"
-	"github.com/zrepl/zrepl/rpc/dataconn/dataconn3"
+	"github.com/zrepl/zrepl/rpc/dataconn"
 	"github.com/zrepl/zrepl/rpc/grpcclientidentity"
 	"github.com/zrepl/zrepl/rpc/netadaptor"
 	"github.com/zrepl/zrepl/endpoint"
