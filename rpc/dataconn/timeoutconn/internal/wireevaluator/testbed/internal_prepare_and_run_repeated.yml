@@ -22,12 +22,18 @@
 
 - name: Deploy client identity
   copy:
-    src: "files/{{item}}"
+    src: "files/wireevaluator.{{item}}"
     dest: "/opt/wireevaluator.{{item}}"
     mode: 0400
   with_items:
-      - ssh_client_identity
-      - ssh_client_identity.pub
+    - ssh_client_identity
+    - ssh_client_identity.pub
+    - tls.ca.key
+    - tls.ca.crt
+    - tls.theserver.key
+    - tls.theserver.crt
+    - tls.theclient.key
+    - tls.theclient.crt
 
 - name: Setup server ssh client identity access
   when: inventory_hostname == "serve"
@@ -35,7 +41,7 @@
   - authorized_key:
       user: root
       state: present
-      key: "{{ lookup('file', 'files/ssh_client_identity.pub') }}"
+      key: "{{ lookup('file', 'files/wireevaluator.ssh_client_identity.pub') }}"
       key_options: 'command="/opt/wireevaluator -mode stdinserver -config /opt/wireevaluator.yml client1"'
   - file:
       state: directory

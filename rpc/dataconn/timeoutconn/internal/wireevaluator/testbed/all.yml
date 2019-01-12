@@ -7,7 +7,7 @@
       wireevaluator_case: "{{config.1}}"
       wireevaluator_repeat: "{{wireevaluator_repeat}}"
       with_cartesian:
-        - [ ssh, tcp ]
+        - [ tls, ssh, tcp ]
         -
           - closewrite_server
           - closewrite_client
