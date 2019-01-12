@@ -45,5 +45,7 @@ func (c *TLSConnecter) Connect(dialCtx context.Context) (transport.Wire, error) 
 	if err != nil {
 		return nil, err
 	}
-	return tls.Client(conn, c.tlsConfig), nil
+	tcpConn := conn.(*net.TCPConn)
+	tlsConn := tls.Client(conn, c.tlsConfig)
+	return newWireAdaptor(tlsConn, tcpConn), nil
 }

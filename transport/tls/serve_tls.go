@@ -54,7 +54,8 @@ func TLSListenerFactoryFromConfig(c *config.Global, in *config.TLSServe) (transp
 		if err != nil {
 			return nil, err
 		}
-		tl := tlsconf.NewClientAuthListener(l, clientCA, serverCert, handshakeTimeout)
+		tcpL := l.(*net.TCPListener)
+		tl := tlsconf.NewClientAuthListener(tcpL, clientCA, serverCert, handshakeTimeout)
 		return &tlsAuthListener{tl, clientCNs}, nil
 	}
 
@@ -67,22 +68,22 @@ type tlsAuthListener struct {
 }
 
 func (l tlsAuthListener) Accept(ctx context.Context) (*transport.AuthConn, error) {
-	c, cn, err := l.ClientAuthListener.Accept()
+	tcpConn, tlsConn, cn, err := l.ClientAuthListener.Accept()
 	if err != nil {
 		return nil, err
 	}
 	if _, ok := l.clientCNs[cn]; !ok {
 		if dl, ok := ctx.Deadline(); ok {
-			defer c.SetDeadline(time.Time{})
-			c.SetDeadline(dl)
+			defer tlsConn.SetDeadline(time.Time{})
+			tlsConn.SetDeadline(dl)
 		}
-		if err := c.Close(); err != nil {
+		if err := tlsConn.Close(); err != nil {
 			transport.GetLogger(ctx).WithError(err).Error("error closing connection with unauthorized common name")
 		}
-		return nil, fmt.Errorf("unauthorized client common name %q from %s", cn, c.RemoteAddr())
+		return nil, fmt.Errorf("unauthorized client common name %q from %s", cn, tlsConn.RemoteAddr())
 	}
-	tlsConn := c.(*tls.Conn) // gives us the Wire interface
-	return transport.NewAuthConn(tlsConn, cn), nil
+	adaptor := newWireAdaptor(tlsConn, tcpConn)
+	return transport.NewAuthConn(adaptor, cn), nil
 }
 
 
