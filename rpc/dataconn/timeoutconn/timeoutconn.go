@@ -199,22 +199,22 @@ func (c Conn) ReadvFull(buffers net.Buffers) (n int64, err error) {
 	return
 }
 
-func (c Conn) readvFallback(buffers net.Buffers) (n int64, err error) {
+func (c Conn) readvFallback(nbuffers net.Buffers) (n int64, err error) {
+	buffers := [][]byte(nbuffers)
 	for i := range buffers {
+		curBuf := buffers[i]
 	inner:
-		for {
+		for len(curBuf) > 0 {
 			if err := c.renewReadDeadline(); err != nil {
 				return n, err
 			}
-			oneN, oneErr := io.ReadFull(c, buffers[i])
+			var oneN int
+			oneN, err = c.Read(curBuf[:]) // WE WANT NO SHADOWING
+			curBuf = curBuf[oneN:]
 			n += int64(oneN)
 			if err != nil {
-				if netErr, ok := oneErr.(net.Error); ok && netErr.Timeout() && oneN > 0 {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() && oneN > 0 {
 					continue inner
-				}
-				// reverse io.EOF => io.ErrUnexpectedEOF by io.ReadFull
-				if err == io.ErrUnexpectedEOF {
-					err = io.EOF
 				}
 				return n, err
 			}
