@@ -88,8 +88,12 @@ type Frame struct {
 
 var ErrShutdown = fmt.Errorf("frameconn: shutting down")
 
-// f is an out-parameter
-// if err == nil is returned, f is valid until the next call to ReadFrame
+// ReadFrame reads a frame from the connection.
+//
+// Due to an internal optimization (Readv, specifically), it is not guaranteed that a single call to
+// WriteFrame unblocks a pending ReadFrame on an otherwise idle (empty) connection.
+// The only way to guarantee that all previously written frames can reach the peer's layers on top
+// of frameconn is to send an empty frame (no payload) and to ignore empty frames on the receiving side.
 func (c *Conn) ReadFrame() (Frame, error) {
 
 	if c.shutdown.IsShuttingDown() {
@@ -132,12 +136,45 @@ func (c *Conn) readFrame() (Frame, error) {
 	buffer := c.bufPool.Get(uint(c.readNext.PayloadLen))
 	bufferBytes := buffer.Bytes()
 
+	if c.readNext.PayloadLen == 0 {
+		// This if statement implements the unlock-by-sending-empty-frame behavior
+		// documented in ReadFrame's public docs.
+		//
+		// It is crucial that we return this empty frame now:
+		// Consider the following plot with x-axis being time,
+		// P being a frame with payload, E one without, X either of P or E
+		//
+		//    P P P P P P P E.....................X
+		//                | |         |           |
+		//                | |         |           F3
+		//                | |         |
+		//                | F2        |signficant time between frames because
+		//                F1           the peer has nothing to say to us
+		//
+		// Assume we're at the point were F2's header is in c.readNext.
+		// That means F2 has not yet been returned.
+		// But because it is empty (no payload), we're already done reading it.
+		// If we omitted this if statement, the following would happen:
+		// Readv below would read [][]byte{[len(0)], [len(8)]).
+
+		c.readNextValid = false
+		frame := Frame{
+			Header: c.readNext,
+			Buffer: Buffer{
+				bufpoolBuffer: buffer,
+				payloadLen:    c.readNext.PayloadLen, // 0
+			},
+		}
+		return frame, nil
+	}
+
 	noNextHeader := false
 	if n, err := c.nc.ReadvFull([][]byte{bufferBytes, nextHdrBuf[:]}); err != nil {
 		noNextHeader = true	
 		zeroPayloadAndPeerClosed := n == 0 && c.readNext.PayloadLen == 0 && err == io.EOF
+		zeroPayloadAndNextFrameHeaderThenPeerClosed := err == io.EOF && c.readNext.PayloadLen == 0 && n == int64(len(nextHdrBuf))
 		nonzeroPayloadRecvdButNextHeaderMissing := n > 0 && uint32(n) == c.readNext.PayloadLen
-		if zeroPayloadAndPeerClosed || nonzeroPayloadRecvdButNextHeaderMissing {
+		if zeroPayloadAndPeerClosed || zeroPayloadAndNextFrameHeaderThenPeerClosed || nonzeroPayloadRecvdButNextHeaderMissing {
 			// This is the last frame on the conn.
 			// Store the error to be returned on the next invocation of ReadFrame.
 			c.nextReadErr = err
