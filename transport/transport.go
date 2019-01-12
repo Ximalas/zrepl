@@ -5,7 +5,6 @@ package transport
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"syscall"
 
@@ -21,12 +20,10 @@ type AuthConn struct {
 
 var _ timeoutconn.SyscallConner = AuthConn{}
 
-var errAuthConnNoSyscallConn = fmt.Errorf("underlying conn is not a SyscallConn")
-
 func (a AuthConn) SyscallConn() (rawConn syscall.RawConn, err error) {
 	scc, ok := a.Wire.(timeoutconn.SyscallConner)
 	if !ok {
-		return nil, errAuthConnNoSyscallConn
+		return nil, timeoutconn.SyscallConnNotSupported
 	}
 	return scc.SyscallConn()
 }

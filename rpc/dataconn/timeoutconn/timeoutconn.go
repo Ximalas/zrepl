@@ -8,6 +8,7 @@ package timeoutconn
 // because we use raw syscalls, bypassing Conn's Read / Write methods.
 
 import (
+	"errors"
 	"io"
 	"net"
 	"sync/atomic"
@@ -139,11 +140,16 @@ restart:
 	return n, err
 }
 
+var SyscallConnNotSupported = errors.New("SyscallConn not supported")
+
 // The interface that must be implemented for vectored I/O support.
 // If the wrapped Wire does not implement it, a less efficient
 // fallback implementation is used.
 // Rest assured that Go's *net.TCPConn implements this interface.
 type SyscallConner interface {
+	// The sentinel error value SyscallConnNotSupported can be returned
+	// if the support for SyscallConn depends on runtime conditions and
+	// that runtime condition is not met.
 	SyscallConn() (syscall.RawConn, error)
 }
 
@@ -183,6 +189,9 @@ func (c Conn) ReadvFull(buffers net.Buffers) (n int64, err error) {
 		return c.readvFallback(buffers)
 	}
 	raw, err := scc.SyscallConn()
+	if err == SyscallConnNotSupported {
+		return c.readvFallback(buffers)
+	}
 	if err != nil {
 		return 0, err
 	}
