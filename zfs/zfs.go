@@ -748,7 +748,9 @@ func ZFSRecv(ctx context.Context, fs string, streamCopier StreamCopier, addition
 	fmt.Fprintf(os.Stderr, "Recv: copierErr = %v\n", copierErr) // FIXME
 	waitErr := <- waitErrChan
 	fmt.Fprintf(os.Stderr, "Recv returned: copierErr=%v waiterr=%v\n", copierErr, waitErr) // FIXME
-	if copierErr != nil && copierErr.IsWriteError() && waitErr != nil {
+	if copierErr == nil && waitErr == nil {
+		return nil
+	} else if waitErr != nil && (copierErr == nil || copierErr.IsWriteError()) {
 		return waitErr // has more interesting info in that case
 	}
 	return copierErr // if it's not a write error, the copier error is more interesting
