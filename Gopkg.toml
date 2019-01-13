@@ -52,10 +52,6 @@ required = [
   version = "*"
 
 [[constraint]]
-  name = "github.com/problame/go-rwccmd"
-  branch = "master"
-
-[[constraint]]
   name = "github.com/problame/go-netssh"
   branch = "master"
 

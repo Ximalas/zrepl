@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"context"
-	"github.com/problame/go-rwccmd"
 	"github.com/prometheus/client_golang/prometheus"
 	"regexp"
 	"strconv"
@@ -229,18 +228,24 @@ func ZFSListChan(ctx context.Context, out chan ZFSListResult, properties []strin
 		}
 	}
 
-	cmd, err := rwccmd.CommandContext(ctx, ZFS_BINARY, args, []string{})
+	cmd := exec.CommandContext(ctx, ZFS_BINARY, args...)
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		sendResult(nil, err)
 		return
 	}
+	// TODO bounded buffer
+	stderr := bytes.NewBuffer(make([]byte, 0, 1024))
+	cmd.Stderr = stderr
 	if err = cmd.Start(); err != nil {
 		sendResult(nil, err)
 		return
 	}
-	defer cmd.Close()
+	defer func() {
+		cmd.Wait()
+	}()
 
-	s := bufio.NewScanner(cmd)
+	s := bufio.NewScanner(stdout)
 	buf := make([]byte, 1024) // max line length
 	s.Buffer(buf, 0)
 
@@ -254,8 +259,20 @@ func ZFSListChan(ctx context.Context, out chan ZFSListResult, properties []strin
 			return
 		}
 	}
+	if err := cmd.Wait(); err != nil {
+		if err, ok := err.(*exec.ExitError); ok {
+			sendResult(nil, &ZFSError{
+				Stderr:  stderr.Bytes(),
+				WaitErr: err,
+			})
+		} else {
+			sendResult(nil, &ZFSError{WaitErr: err})
+		}
+		return
+	}
 	if s.Err() != nil {
 		sendResult(nil, s.Err())
+		return
 	}
 	return
 }

@@ -222,14 +222,6 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:8c63c44f018bd52b03ebad65c9df26aabbc6793138e421df1c8c84c285a45bc6"
-  name = "github.com/problame/go-rwccmd"
-  packages = ["."]
-  pruneopts = ""
-  revision = "391d2c78c8404a9683d79f75dd24ab53040f89f7"
-
-[[projects]]
-  branch = "master"
   digest = "1:ebf8ffdde9bdbf9c83e22121875c68c01d821776523546554b2a3ff6f72773ab"
   name = "github.com/prometheus/client_golang"
   packages = [
@@ -431,7 +423,6 @@
     "github.com/mattn/go-isatty",
     "github.com/pkg/errors",
     "github.com/problame/go-netssh",
-    "github.com/problame/go-rwccmd",
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promhttp",
     "github.com/spf13/cobra",

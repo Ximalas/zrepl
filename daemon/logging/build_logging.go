@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"github.com/mattn/go-isatty"
 	"github.com/pkg/errors"
-	"github.com/problame/go-rwccmd"
 	"github.com/zrepl/zrepl/config"
 	"github.com/zrepl/zrepl/daemon/pruner"
 	"github.com/zrepl/zrepl/daemon/snapper"
@@ -70,7 +69,6 @@ const (
 	SubsysSnapshot      Subsystem = "snapshot"
 	SubsysTransport     Subsystem = "transport"
 	SubsysTransportMux  Subsystem = "transportmux"
-	SubsysRwccmd        Subsystem = "rwccmd"
 	SubsysRPC           Subsystem = "rpc"
 	SubsysControlServer Subsystem = "rpc.ctrl"
 	SubsysDataServer    Subsystem = "rpc.data"
@@ -83,7 +81,6 @@ func WithSubsystemLoggers(ctx context.Context, log logger.Logger) context.Contex
 	ctx = snapper.WithLogger(ctx, log.WithField(SubsysField, SubsysSnapshot))
 	ctx = transport.WithLogger(ctx, log.WithField(SubsysField, SubsysTransport))
 	ctx = transportmux.WithLogger(ctx, log.WithField(SubsysField, SubsysTransportMux))
-	ctx = rwccmd.ContextWithLog(ctx, log.WithField(SubsysField, SubsysRwccmd))
 	return ctx
 }
 
