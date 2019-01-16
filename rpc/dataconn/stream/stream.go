@@ -73,24 +73,30 @@ func writeStream(ctx context.Context, c *heartbeatconn.Conn, stream io.Reader, s
 }
 
 func doWriteStream(ctx context.Context, c *heartbeatconn.Conn, stream io.Reader, stype uint32) (errStream, errConn error) {
+
+	// RULE1 (buf == <zero>) XOR (err == nil)
 	type read struct {
 		buf base2bufpool.Buffer
 		err error
 	}
+
 	reads := make(chan read, 5)
 	go func() {
 		for {
 			buffer := bufpool.Get(1 << FramePayloadShift)
 			bufferBytes := buffer.Bytes()
-			//			fmt.Fprintf(os.Stderr, "writeStream: read full begin\n");
 			n, err := io.ReadFull(stream, bufferBytes)
-			//			fmt.Fprintf(os.Stderr, "writeStream: read full end %v %v\n", err, n);
 			buffer.Shrink(uint(n))
+			// if we received anything, send one read without an error (RULE 1)
+			if n > 0 {
+				reads <- read{buffer, nil}
+			}
 			if err == io.ErrUnexpectedEOF {
+				// happens iff io.ReadFull read io.EOF from stream
 				err = io.EOF
 			}
-			reads <- read{buffer, err}
 			if err != nil {
+				reads <- read{err: err} // RULE1
 				close(reads)
 				return
 			}
@@ -98,27 +104,27 @@ func doWriteStream(ctx context.Context, c *heartbeatconn.Conn, stream io.Reader,
 	}()
 
 	for read := range reads {
-		buf := read.buf
-		if read.err != nil && read.err != io.EOF {
-			buf.Free()
+		if read.err == nil {
+			// RULE 1: read.buf is valid
+			// next line is the hot path...
+			writeErr := c.WriteFrame(read.buf.Bytes(), stype)
+			read.buf.Free()
+			if writeErr != nil {
+				return nil, writeErr
+			}
+			continue
+		} else if read.err == io.EOF {
+			if err := c.WriteFrame([]byte{}, End); err != nil {
+				return nil, err
+			}
+			break
+		} else {
 			errReader := strings.NewReader(read.err.Error())
 			errReadErrReader, errConnWrite := doWriteStream(ctx, c, errReader, StreamErrTrailer)
 			if errReadErrReader != nil {
 				panic(errReadErrReader) // in-memory, cannot happen
 			}
 			return read.err, errConnWrite
-		}
-		// next line is the hot path...
-		writeErr := c.WriteFrame(buf.Bytes(), stype)
-		buf.Free()
-		if writeErr != nil {
-			return nil, writeErr
-		}
-		if read.err == io.EOF {
-			if err := c.WriteFrame([]byte{}, End); err != nil {
-				return nil, err
-			}
-			break
 		}
 	}
 
