@@ -144,25 +144,27 @@ func (c *Conn) SendStream(ctx context.Context, src zfs.StreamCopier, frameType u
 
 	var r io.Reader
 	var w *io.PipeWriter
-	streamCopierErrChan := make(chan zfs.StreamCopierError)
+	streamCopierErrChan := make(chan zfs.StreamCopierError, 1)
 	if reader, ok := src.(io.Reader); ok {
 		r = reader
+		streamCopierErrChan <- nil
 		close(streamCopierErrChan)
 	} else {
 		r, w = io.Pipe()
 		go func() {
 			streamCopierErrChan <- src.WriteStreamTo(w)
+			w.Close()
 		}()
 	}
 
 	type writeStreamRes struct {
 		errStream, errConn error
 	}
-	writeStreamErrChan := make(chan writeStreamRes)
+	writeStreamErrChan := make(chan writeStreamRes, 1)
 	go func() {
 		var res writeStreamRes
 		res.errStream, res.errConn = writeStream(ctx, c.hc, r, frameType)
-		if res.errStream != nil && w != nil {
+		if w != nil {
 			w.CloseWithError(res.errStream)
 		}
 		writeStreamErrChan <- res
@@ -180,7 +182,7 @@ func (c *Conn) SendStream(ctx context.Context, src zfs.StreamCopier, frameType u
 			return writeRes.errConn
 		}
 		// TODO combined error?
-		return nil
+		return streamCopierErr
 	}
 }
 
