@@ -4,8 +4,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
+	"os"
 	"time"
 )
 
@@ -43,6 +46,7 @@ func NewClientAuthListener(
 		ClientCAs:                ca,
 		ClientAuth:               tls.RequireAndVerifyClientCert,
 		PreferServerCipherSuites: true,
+		KeyLogWriter:             keylogFromEnv(),
 	}
 	return &ClientAuthListener{
 		l,
@@ -113,7 +117,21 @@ func ClientAuthClient(serverName string, rootCA *x509.CertPool, clientCert tls.C
 		Certificates: []tls.Certificate{clientCert},
 		RootCAs:      rootCA,
 		ServerName:   serverName,
+		KeyLogWriter: keylogFromEnv(),
 	}
 	tlsConfig.BuildNameToCertificate()
 	return tlsConfig, nil
+}
+
+func keylogFromEnv() io.Writer {
+	var keyLog io.Writer = nil
+	if outfile := os.Getenv("ZREPL_KEYLOG_FILE"); outfile != "" {
+		fmt.Fprintf(os.Stderr, "writing to key log %s\n", outfile)
+		var err error
+		keyLog, err = os.OpenFile(outfile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+		if err != nil {
+			panic(err)
+		}
+	}
+	return keyLog
 }
