@@ -368,7 +368,7 @@ func newSendStreamCopier(stream io.ReadCloser) *sendStreamCopier {
 	return &sendStreamCopier{recorder: readErrRecorder{stream, nil}}
 }
 
-func (c sendStreamCopier) WriteStreamTo(w io.Writer) StreamCopierError {
+func (c *sendStreamCopier) WriteStreamTo(w io.Writer) StreamCopierError {
 	_, err := io.Copy(w, &c.recorder)
 	if err != nil {
 		if c.recorder.readErr != nil {
@@ -380,11 +380,11 @@ func (c sendStreamCopier) WriteStreamTo(w io.Writer) StreamCopierError {
 	return nil
 }
 
-func (c sendStreamCopier) Read(p []byte) (n int, err error) {
+func (c *sendStreamCopier) Read(p []byte) (n int, err error) {
 	return c.recorder.Read(p)
 }
 
-func (c sendStreamCopier) Close() error {
+func (c *sendStreamCopier) Close() error {
 	return c.recorder.ReadCloser.Close()
 }
 
