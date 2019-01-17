@@ -6,16 +6,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/zrepl/zrepl/util/watchdog"
 	"net"
 	"sync"
 	"time"
 
-	"github.com/zrepl/zrepl/zfs"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/zrepl/zrepl/logger"
 	"github.com/zrepl/zrepl/replication/pdu"
-	"github.com/zrepl/zrepl/util"
+	"github.com/zrepl/zrepl/util/bytecounter"
+	"github.com/zrepl/zrepl/util/watchdog"
+	"github.com/zrepl/zrepl/zfs"
 )
 
 type contextKey int
@@ -225,7 +225,7 @@ type ReplicationStep struct {
 	// both retry and permanent error
 	err error
 
-	byteCounter  *util.ByteCounterReader
+	byteCounter  bytecounter.StreamCopier
 	expectedSize int64 // 0 means no size estimate present / possible
 }
 
@@ -410,21 +410,38 @@ func (s *ReplicationStep) doReplication(ctx context.Context, ka *watchdog.KeepAl
 	}
 	defer sstreamCopier.Close()
 
-	//s.byteCounter = util.NewByteCounterReader(sstream)
-	//s.byteCounter.SetCallback(1*time.Second, func(i int64) {
-	//	ka.MadeProgress()
-	//})
-	//defer func() {
-	//	s.parent.promBytesReplicated.Add(float64(s.byteCounter.Bytes()))
-	//}()
-	//sstream = s.byteCounter
+	// Install a byte counter to track progress + for status report
+	s.byteCounter = bytecounter.NewStreamCopier(sstreamCopier)
+	byteCounterStopProgress := make(chan struct{})
+	defer close(byteCounterStopProgress)
+	go func() {
+		var lastCount int64
+		t := time.NewTicker(1 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-byteCounterStopProgress:
+				return
+			case <-t.C:
+				newCount := s.byteCounter.Count()
+				if lastCount != newCount {
+					ka.MadeProgress()
+				} else {
+					lastCount = newCount
+				}
+			}
+		}
+	}()
+	defer func() {
+		s.parent.promBytesReplicated.Add(float64(s.byteCounter.Count()))
+	}()
 
 	rr := &pdu.ReceiveReq{
 		Filesystem:       fs,
 		ClearResumeToken: !sres.UsedResumeToken,
 	}
 	log.Debug("initiate receive request")
-	_, err = receiver.Receive(ctx, rr, sstreamCopier)
+	_, err = receiver.Receive(ctx, rr, s.byteCounter)
 	if err != nil {
 		log.
 			WithError(err).
@@ -522,7 +539,7 @@ func (s *ReplicationStep) Report() *StepReport {
 	}
 	bytes := int64(0)
 	if s.byteCounter != nil {
-		bytes = s.byteCounter.Bytes()
+		bytes = s.byteCounter.Count()
 	}
 	problem := ""
 	if s.err != nil {
